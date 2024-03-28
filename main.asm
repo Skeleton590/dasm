@@ -49,6 +49,7 @@ accept_error_msg db "[ERROR]: Failed to accept connection from client.", 0xA, 0
 
 section .text
 
+; Prints NULL terminated strings.
 _fd_out:
 
     mov rax, 1
@@ -64,8 +65,9 @@ _fd_out:
     syscall
     ret
 
+; Program entry point.
 _start:
-    ; write(1, start_status_msg, start_status_msg_length);
+    ; _fd_out(STDOUT_FILENO, start_status_msg);
     mov rdi, 1
     mov rsi, start_status_msg
     call _fd_out
@@ -77,7 +79,7 @@ _start:
     mov rdx, IP
     syscall
 
-    ; saving server fd
+    ; Saving server fd.
     mov rbx, rax
 
     ; bind(server_file_descriptor, (struct sockaddr *)&address, sizeof(address));
@@ -93,6 +95,7 @@ _start:
 
     ; listen(server_file_descriptor, 10);
     mov rax, 0x32
+    ; This line is commented out because rdi already has rbx's contents in it.
     ;mov rdi, rbx
     mov rsi, 10
     syscall
@@ -102,7 +105,7 @@ _start:
     jl listen_error
 
     .loop:
-        ; write(1, listen_status_msg, listen_status_msg_length);
+        ; _fd_out(1, listen_status_msg);
         mov rdi, 1
         mov rsi, listen_status_msg
         call _fd_out
@@ -122,7 +125,7 @@ _start:
         push rbx
         mov rbx, rax
 
-        ; write(1, connection_status_msg, listen_status_msg_length);
+        ; _fd_out(1, connection_status_msg);
         mov rdi, 1
         mov rsi, connected_status_msg
         call _fd_out
@@ -135,19 +138,21 @@ _start:
         syscall
         mov [buffer + rax], byte 0
 
-        ; write(client_file_descriptor, return_msg, return_msg_length);
-        mov rdi, rbx
+        ; _fd_out(client_file_descriptor, return_msg);
+        ;mov rdi, rbx
         mov rsi, return_msg
         call _fd_out
 
+        ; _fd_out(1, client_prefix_msg);
         mov rdi, 1
         mov rsi, client_prefix_msg
         call _fd_out
+        ; _fd_out(1, buffer);
+        ;mov rdi, 1
         mov rsi, buffer
         call _fd_out
-
-        ; write(1, disconnect_status_msg, listen_status_msg_length);
-        mov rdi, 1
+        ; _fd_out(1, disconnect_status_msg);
+        ;mov rdi, 1
         mov rsi, disconnect_status_msg
         call _fd_out
 
@@ -161,20 +166,21 @@ _start:
 
         jmp .loop
 
-    xor rdi, rdi
+    ; If there was no error clear the error massage argument.
+    xor rsi, rsi
 
+    ; Error handling fall through. 
     jmp accept_error_end
     accept_error:
     mov rsi, accept_error_msg
-    jmp exit_error
     accept_error_end:
 
     jmp listen_error_end
     listen_error:
     mov rsi, listen_error_msg
-    jmp exit_error
     listen_error_end:
 
+    ; close(server_file_descriptor);
     mov rax, 0x3
     mov rdi, rbx
     syscall
@@ -182,16 +188,21 @@ _start:
     jmp bind_error_end
     bind_error:
     mov rsi, bind_error_msg
-    jmp exit_error
     bind_error_end:
 
-    jmp exit
+    ; Clearing the return code just in case there was no error.
+    xor rdi, rdi
+
+    ; Checking to see if there was an error message to print.
+    test rsi, rsi
+    jz exit
     exit_error:
+    ; _fd_out(1, error_msg);
     mov rdi, 2
     call _fd_out
-
     mov rdi, 1
 
+    ; exit(return_code);
     exit:
     mov rax, 0x3C
     syscall
